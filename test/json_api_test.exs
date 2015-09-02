@@ -590,7 +590,8 @@ defmodule Voorhees.Test.JSONApi do
       user: %{
         attributes: %{
           email: "test@example.com",
-          name: "Other"
+          name: "Other",
+          bio: %{}
         }
       }
     }
@@ -612,7 +613,7 @@ defmodule Voorhees.Test.JSONApi do
       }]
     }
 
-    assert_raise ExUnit.AssertionError, "Expected type: user to contain record with values: email: test@example.com, name: Other", fn ->
+    assert_raise ExUnit.AssertionError, "Expected type: user to contain record with values: bio: %{}, email: \"test@example.com\", name: \"Other\"", fn ->
       Voorhees.JSONApi.assert_payload_contains response, expected
     end
   end
