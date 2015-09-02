@@ -73,7 +73,7 @@ defmodule Voorhees.JSONApi do
           else
             result
           end
-        end), "Expected type: #{expected_type} to contain record with values: #{Enum.map_join(expected_attributes, ", ", fn({k, v}) -> "#{k}: #{v}" end)}"
+        end), "Expected type: #{expected_type} to contain record with values: #{Enum.map_join(expected_attributes, ", ", fn({k, v}) -> "#{k}: #{inspect(v)}" end)}"
       end
     end
   end
