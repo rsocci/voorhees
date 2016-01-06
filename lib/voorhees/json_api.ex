@@ -53,26 +53,21 @@ defmodule Voorhees.JSONApi do
 
   defp error_message(actual, expected) do
     full_message = "Payload did not match expected\n\n"
-    expected = normalize_map_keys(expected)
+    expected = normalize_map(expected)
 
     with {:ok, actual_data} <- Map.fetch(actual, "data"),
          {:ok, expected_data} <- Map.fetch(expected, "data") do
            compare_resources(actual_data, expected_data)
            |> case do
              {:error, message} -> full_message = full_message <> "\"data\" did not match expected\n" <> message
-             :ok -> nil
+             :ok -> ""
            end
          end
   end
 
   defp compare_resources(actual, expected) when is_map(actual) do
-    expected = normalize_map_keys(expected)
-    filtered_actual = remove_extra_info(actual, expected)
+    filtered_actual = filter_out_extra_keys(actual, expected)
 
-    # These two values are always different, even if payload matches. (need to normalize inner map)
-    # The following fails:
-    # expected: %{"attributes" => %{name: "Tester"}, "id" => "1", "type" => "user"}
-    # filtered_actual: %{"attributes" => %{"name" => "Tester"}, "id" => "1", "type" => "user"}
     if (filtered_actual == expected) do
       :ok
     else
@@ -104,59 +99,51 @@ defmodule Voorhees.JSONApi do
     {:error, message}
   end
 
-  defp remove_extra_info(actual, expected) do
-    actual =
-      actual
-      |> clean_key(expected, "attributes")
-      # |> clean_key(expected, "relationships")
-
-  end
-
-  defp clean_key(actual, expected, key) do
-    %{^key => actual_value} = actual
-    %{^key => expected_value} = expected
-
-    actual
-    |> Map.put(key, clean_value(actual_value, normalize_map_keys(expected_value)))
-  end
-
-  defp clean_value(actual_value, expected_value) when is_map(actual_value) do
-    expected_keys = Map.keys(expected_value)
-
-    Enum.reduce(actual_value, %{}, fn
-      {key, value}, acc ->
-        if Enum.member?(expected_keys, key) do
-          Map.put(acc, key, value)
-        else
-          acc
-        end
-    end)
-  end
-
-  defp clean_value(actual_value, expected_value) when is_list(actual_value) do
-    actual_value
-    |> Enum.with_index
-    |> Enum.map(fn
-      {value, index} ->
-        clean_value(value, Enum.at(expected_value, index))
-    end)
-  end
-
-  defp clean_value(actual_value, _expected_value), do: actual_value
-
-  defp normalize_map_keys(map) when is_map(map) do
+  defp normalize_map(map) when is_map(map) do
     map
-    |> Enum.map(&normalize_key/1)
+    |> Enum.map(&normalize_map_entry/1)
     |> Enum.into(%{})
   end
 
-  # defp normalize_map_keys(value), do: value
+  defp normalize_map(list) when is_list(list), do: Enum.map(list, &normalize_map/1)
+  defp normalize_map(value), do: value
 
-  defp normalize_key({key, value}) when is_atom(key) do
-    # call `normalize_map_keys` on value?
-    # {Atom.to_string(key), normalize_map_keys(value)}
-    {Atom.to_string(key), value}
+  defp normalize_map_entry({key, value}) when is_map(value) or is_list(value), do: {normalize_key(key), normalize_map(value)}
+  defp normalize_map_entry({key, value}), do: {normalize_key(key), value}
+
+  defp normalize_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp normalize_key(key), do: key
+
+  defp filter_out_extra_keys(payload, expected_payload, options \\ %{}) when is_list(payload) do
+    filtered_payload = payload
+    |> Enum.with_index
+    |> Enum.map(fn {value, index} -> filter_out_extra_keys(value, Enum.at(expected_payload, index), options) end)
+
+    if Dict.get(options, :ignore_list_order) do
+      if filtered_payload -- expected_payload == [] && expected_payload -- filtered_payload == [] do
+        filtered_payload = expected_payload
+      end
+    end
+
+    filtered_payload
   end
 
-  defp normalize_key(tuple), do: tuple
+  defp filter_out_extra_keys(payload, nil, _options) when is_map(payload), do: payload
+
+  defp filter_out_extra_keys(payload, expected_payload, options) when is_map(payload) do
+    payload
+    |> Enum.filter(fn
+      {key, _value} ->
+        expected_payload
+        |> Map.keys
+        |> Enum.member?(key)
+    end)
+    |> Enum.map(fn
+      {key, value} when is_map(value) or is_list(value) -> {key, filter_out_extra_keys(value, expected_payload[key], options)}
+      entry -> entry
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp filter_out_extra_keys(payload, _expected_payload, _options), do: payload
 end
