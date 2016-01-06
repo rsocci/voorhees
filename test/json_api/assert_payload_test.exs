@@ -440,4 +440,50 @@ defmodule Voorhees.Test.JSONApi.AssertPayloadTest do
       }, ignore_list_order: true)
     end
   end
+
+  test "throw an error when the `ignore_list_order` flag is set, but a resource is incorrect in data" do
+    payload = %{
+      "data" => [%{
+        "type" => "user",
+        "id" => "2",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester1"
+        }
+      },%{
+        "type" => "user",
+        "id" => "1",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      }]
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+    Contained extra resources:
+      %{"attributes" => %{"name" => "Tester1"}, "id" => "2", "type" => "user"}
+    Missing resources:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: [%{
+          id: "1",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        },%{
+          id: "2",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        }]
+      }, ignore_list_order: true)
+    end
+  end
 end
