@@ -305,4 +305,139 @@ defmodule Voorhees.Test.JSONApi.AssertPayloadTest do
       }
     end
   end
+
+  test "throw an error when the `ignore_list_order` flag is set, but is missing a resource in data" do
+    payload = %{
+      "data" => [%{
+        "type" => "user",
+        "id" => "1",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      }]
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+    Missing resources:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: [%{
+          id: "2",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        },%{
+          id: "1",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        }]
+      }, ignore_list_order: true)
+    end
+
+    payload = %{
+      "data" => []
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+    Missing resources:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"},
+      %{"attributes" => %{"name" => "Tester"}, "id" => "1", "type" => "user"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: [%{
+          id: "2",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        },%{
+          id: "1",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        }]
+      }, ignore_list_order: true)
+    end
+  end
+
+  test "throw an error when the `ignore_list_order` flag is set, but is an extra resource in data" do
+    payload = %{
+      "data" => [%{
+        "type" => "user",
+        "id" => "2",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      },%{
+        "type" => "user",
+        "id" => "1",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      }]
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+    Contained extra resources:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: [%{
+          id: "1",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        }]
+      }, ignore_list_order: true)
+    end
+
+    payload = %{
+      "data" => [%{
+        "type" => "user",
+        "id" => "2",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      },%{
+        "type" => "user",
+        "id" => "1",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      }]
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+    Contained extra resources:
+      %{\"attributes\" => %{\"email\" => \"test@example.com\", \"name\" => \"Tester\"}, \"id\" => \"2\", \"type\" => \"user\"},
+      %{\"attributes\" => %{\"email\" => \"test@example.com\", \"name\" => \"Tester\"}, \"id\" => \"1\", \"type\" => \"user\"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: []
+      }, ignore_list_order: true)
+    end
+  end
 end

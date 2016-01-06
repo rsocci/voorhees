@@ -46,27 +46,30 @@ defmodule Voorhees.JSONApi do
   end
 
   def assert_payload(actual, expected, options \\ []) do
-    assert Voorhees.matches_payload?(actual, expected, options), error_message(actual, expected)
+    comparison = compare_payloads(actual, expected, options)
+    assert :ok == comparison, error_message(comparison)
 
     actual
   end
 
-  defp error_message(actual, expected) do
-    full_message = "Payload did not match expected\n\n"
+  defp error_message(:ok), do: ""
+  defp error_message({:error, message}), do: "Payload did not match expected\n\n" <> message
+
+  defp compare_payloads(actual, expected, options) do
     expected = normalize_map(expected)
 
     with {:ok, actual_data} <- Map.fetch(actual, "data"),
          {:ok, expected_data} <- Map.fetch(expected, "data") do
-           compare_resources(actual_data, expected_data)
+           compare_resources(actual_data, expected_data, options)
            |> case do
-             {:error, message} -> full_message = full_message <> "\"data\" did not match expected\n" <> message
-             :ok -> ""
+             {:error, message} -> {:error, "\"data\" did not match expected\n" <> message}
+             :ok -> :ok
            end
          end
   end
 
-  defp compare_resources(actual, expected) when is_map(actual) do
-    filtered_actual = filter_out_extra_keys(actual, expected)
+  defp compare_resources(actual, expected, options) when is_map(actual) do
+    filtered_actual = filter_out_extra_keys(actual, expected, options)
 
     if (filtered_actual == expected) do
       :ok
@@ -82,21 +85,55 @@ defmodule Voorhees.JSONApi do
     end
   end
 
-  defp compare_resources(actual, expected) when is_list(actual) do
+  defp compare_resources(actual, expected, options) when is_list(actual) do
+    if Dict.get(options, :ignore_list_order) do
+      compare_resources_list(actual, expected, options, :ignore_list_order)
+    else
+      compare_resources_list(actual, expected, options)
+    end
+  end
+
+  defp compare_resources_list(actual, expected, options, :ignore_list_order) when is_list(actual) do
+    filtered_actual = filter_out_extra_keys(actual, expected, options)
+
+    extra_resources = filtered_actual -- expected
+    missing_resources = expected -- filtered_actual
+
+    if Enum.empty?(extra_resources) && Enum.empty?(missing_resources) do
+      :ok
+    else
+      message = ""
+      if Enum.any?(extra_resources) do
+        extra_resources_inspection =
+          extra_resources
+          |> Enum.map(&inspect/1)
+          |> Enum.join(",\n  ")
+        message = message <> "Contained extra resources:\n  " <> extra_resources_inspection <> "\n"
+      end
+      if Enum.any?(missing_resources) do
+        missing_resources_inspection =
+          missing_resources
+          |> Enum.map(&inspect/1)
+          |> Enum.join(",\n  ")
+        message = message <> "Missing resources:\n  " <> missing_resources_inspection <> "\n"
+      end
+      {:error, message}
+    end
+  end
+
+  defp compare_resources_list(actual, expected, options) when is_list(actual) do
     message = actual
     |> Enum.zip(expected)
     |> Enum.map(fn
       {actual_resource, expected_resource} ->
-        compare_resources(actual_resource, expected_resource)
+        compare_resources(actual_resource, expected_resource, options)
     end)
     |> Enum.with_index
-    |> Enum.reduce("", fn
-      {{:error, message}, index}, acc ->
-        acc <> "\nResource at index #{index} did not match\n" <> message
+    |> Enum.reduce({:ok, ""}, fn
+      {{:error, message}, index}, {_state, acc_message} = acc ->
+        {:error, acc_message <> "\nResource at index #{index} did not match\n" <> message}
       _, acc -> acc
     end)
-
-    {:error, message}
   end
 
   defp normalize_map(map) when is_map(map) do
@@ -114,10 +151,11 @@ defmodule Voorhees.JSONApi do
   defp normalize_key(key) when is_atom(key), do: Atom.to_string(key)
   defp normalize_key(key), do: key
 
-  defp filter_out_extra_keys(payload, expected_payload, options \\ %{}) when is_list(payload) do
+  defp filter_out_extra_keys(payload, expected_payload, options) when is_list(payload) do
     filtered_payload = payload
     |> Enum.with_index
-    |> Enum.map(fn {value, index} -> filter_out_extra_keys(value, Enum.at(expected_payload, index), options) end)
+    # When payload is longer than expected_payload, we need to filter out the other potential matches based on an existing payload
+    |> Enum.map(fn {value, index} -> filter_out_extra_keys(value, Enum.at(expected_payload, index) || Enum.at(expected_payload, 0), options) end)
 
     if Dict.get(options, :ignore_list_order) do
       if filtered_payload -- expected_payload == [] && expected_payload -- filtered_payload == [] do
