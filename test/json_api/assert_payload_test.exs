@@ -486,4 +486,62 @@ defmodule Voorhees.Test.JSONApi.AssertPayloadTest do
       }, ignore_list_order: true)
     end
   end
+
+  test "throw an error when resources are correct but out of order" do
+    payload = %{
+      "data" => [%{
+        "type" => "user",
+        "id" => "2",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      },%{
+        "type" => "user",
+        "id" => "1",
+        "attributes" => %{
+          "email" => "test@example.com",
+          "name" => "Tester"
+        }
+      }]
+    }
+
+    assert_raise ExUnit.AssertionError, """
+    Payload did not match expected
+
+    "data" did not match expected
+
+    Resource at index 0 did not match
+    Expected:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "1", "type" => "user"}
+    Actual (filtered):
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"}
+    Actual (untouched):
+      %{"attributes" => %{"email" => "test@example.com", "name" => "Tester"}, "id" => "2", "type" => "user"}
+
+    Resource at index 1 did not match
+    Expected:
+      %{"attributes" => %{"name" => "Tester"}, "id" => "2", "type" => "user"}
+    Actual (filtered):
+      %{"attributes" => %{"name" => "Tester"}, "id" => "1", "type" => "user"}
+    Actual (untouched):
+      %{"attributes" => %{"email" => "test@example.com", "name" => "Tester"}, "id" => "1", "type" => "user"}
+    """, fn ->
+      Voorhees.JSONApi.assert_payload(payload, %{
+        data: [%{
+          id: "1",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        },%{
+          id: "2",
+          type: "user",
+          attributes: %{
+            name: "Tester"
+          }
+        }]
+      })
+    end
+  end
 end
